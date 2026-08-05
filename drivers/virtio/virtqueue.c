@@ -42,7 +42,15 @@ int virtq_create(struct virtq *v, size_t size)
 	size_t used_ring_size = 8 * size + 6;
 	size_t shared_size =
 		descriptor_table_size + available_ring_size + used_ring_pad + used_ring_size;
-	size_t v_size = shared_size + sizeof(struct virtq_receive_callback_entry) * size;
+	/*
+	 * The callback array holds pointers, so it needs natural alignment. The
+	 * shared area ends on an offset that is not a multiple of it (430 bytes
+	 * for a 16 entry queue), and architectures with strict alignment
+	 * requirements fault on the unaligned store otherwise.
+	 */
+	size_t recv_cbs_offset =
+		ROUND_UP(shared_size, __alignof__(struct virtq_receive_callback_entry));
+	size_t v_size = recv_cbs_offset + sizeof(struct virtq_receive_callback_entry) * size;
 
 	uint8_t *v_area = k_aligned_alloc(16, v_size);
 
@@ -55,7 +63,7 @@ int virtq_create(struct virtq *v, size_t size)
 	v->desc = (struct virtq_desc *)v_area;
 	v->avail = (struct virtq_avail *)((uint8_t *)v->desc + descriptor_table_size);
 	v->used = (struct virtq_used *)((uint8_t *)v->avail + available_ring_size + used_ring_pad);
-	v->recv_cbs = (struct virtq_receive_callback_entry *)((uint8_t *)v->used + used_ring_size);
+	v->recv_cbs = (struct virtq_receive_callback_entry *)(v_area + recv_cbs_offset);
 
 	/*
 	 * At the beginning of the descriptor table, the available ring and the used ring have to be

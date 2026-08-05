@@ -26,4 +26,17 @@ config VIRTIO_MMIO
 	help
 	  Enable options for VIRTIO over MMIO
 
+config VIRTIO_PCI_INIT_PRIORITY
+	int "VIRTIO PCI init priority"
+	default 45
+	depends on VIRTIO_PCI
+	help
+	  Device initialization priority for the VIRTIO PCI transport.
+
+	  On platforms where Zephyr enumerates the PCIe bus itself, this must be
+	  greater than PCIE_INIT_PRIORITY: the controller assigns the BARs during
+	  its own init, and the transport reads its configuration structures out
+	  of a BAR. It must also be lower than the priority of the VIRTIO device
+	  drivers sitting on top of it (KERNEL_INIT_PRIORITY_DEVICE).
+
 endif # VIRTIO

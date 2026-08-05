@@ -426,6 +426,14 @@ static int virtio_pci_init_common(const struct device *dev)
 		"found virtio pci device with id 0x%x and bdf 0x%x", conf->pcie->id, conf->pcie->bdf
 	);
 
+	/*
+	 * Enable memory decoding so the configuration structures in the BARs are
+	 * reachable, and bus mastering so the device can DMA the virtqueues. On
+	 * platforms with firmware PCI enumeration these are already set, but when
+	 * Zephyr enumerates the bus itself the device comes up with both cleared.
+	 */
+	pcie_set_cmd(conf->pcie->bdf, PCIE_CONF_CMDSTAT_MEM | PCIE_CONF_CMDSTAT_MASTER, true);
+
 	if (virtio_pci_read_cap(conf->pcie->bdf, VIRTIO_PCI_CAP_COMMON_CFG, &vpc, sizeof(vpc))) {
 		if (!virtio_pci_map_cap(conf->pcie->bdf, &vpc, (void **)&data->common_cfg)) {
 			return 1;
@@ -615,7 +623,7 @@ static DEVICE_API(virtio, virtio_pci_driver_api) = {
 		&virtio_pci_data##inst,                                                     \
 		&virtio_pci_config##inst,                                                   \
 		POST_KERNEL,                                                                \
-		0,                                                                          \
+		CONFIG_VIRTIO_PCI_INIT_PRIORITY,                                            \
 		&virtio_pci_driver_api                                                      \
 	);
 
