@@ -87,6 +87,7 @@ struct k_mem_domain;
 struct k_mem_partition;
 struct k_futex;
 struct k_event;
+struct k_container;
 
 enum execution_context_types {
 	K_ISR = 0,
@@ -6900,6 +6901,18 @@ void k_sys_runtime_stats_enable(void);
  * threads.
  */
 void k_sys_runtime_stats_disable(void);
+
+/**
+ * @brief Container for a app kernel struct
+ *
+ * An app using zephyr can't delcare structs here so this is a simple wrapper
+ * that can be used in this case. The destroy function is called once the object
+ * loses all references and should delete whatever obj points to.
+ */
+struct k_container {
+	void *obj;
+	void (*destroy)(struct k_container *obj);
+};
 
 #ifdef __cplusplus
 }
