@@ -236,6 +236,13 @@ config USERSPACE_THREAD_MAY_RAISE_PRIORITY
 	help
 	  Thread can raise its own priority in userspace mode.
 
+config SYSCALL_FILTER
+	string "Filter userspace allowed syscalls by name"
+	depends on USERSPACE
+	help
+	  Allow userspace to only call syscalls which match the
+	  given regex on it's name.
+
 config DYNAMIC_THREAD
 	bool "Support for dynamic threads [EXPERIMENTAL]"
 	select EXPERIMENTAL

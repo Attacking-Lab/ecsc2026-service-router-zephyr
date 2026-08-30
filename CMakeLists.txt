@@ -961,6 +961,7 @@ add_custom_command(
   --syscall-exports-llext  include/generated/zephyr/syscall_exports_llext.c
   --syscall-weakdefs-llext syscall_weakdefs_llext.c # compiled in CMake library 'syscall_weakdefs'
   --syscall-list     ${syscall_list_h}
+  --syscall-filter   \"${CONFIG_SYSCALL_FILTER}\"
   $<$<BOOL:${CONFIG_USERSPACE}>:--gen-mrsh-files>
   ${SYSCALL_LONG_REGISTERS_ARG}
   ${SYSCALL_SPLIT_TIMEOUT_ARG}

@@ -424,7 +424,7 @@ def marshall_defs(func_name, func_type, args):
     return mrsh, mrsh_name
 
 
-def analyze_fn(match_group, fn, userspace_only):
+def analyze_fn(match_group, fn, userspace_only, syscall_filter):
     func, args = match_group
 
     try:
@@ -444,8 +444,11 @@ def analyze_fn(match_group, fn, userspace_only):
     marshaller, handler = marshall_defs(func_name, func_type, args)
     invocation = wrapper_defs(func_name, func_type, args, fn, userspace_only)
 
-    # Entry in _k_syscall_table
-    table_entry = f"[{sys_id}] = {handler}"
+    if syscall_filter and re.match(syscall_filter, handler):
+        # Entry in _k_syscall_table
+        table_entry = f"[{sys_id}] = {handler}"
+    else:
+        table_entry = f"[{sys_id}] = handler_no_syscall"
 
     return (handler, invocation, marshaller, sys_id, table_entry)
 
@@ -492,6 +495,9 @@ def parse_args():
         "-w", "--syscall-weakdefs-llext", help="output C system call weak definitions"
     )
     parser.add_argument(
+        "--syscall-filter", help="filter syscalls by name with regex"
+    )
+    parser.add_argument(
         "-u",
         "--userspace-only",
         action="store_true",
@@ -521,7 +527,8 @@ def main():
     exported = []
 
     for match_group, fn, to_emit in syscalls:
-        handler, inv, mrsh, sys_id, entry = analyze_fn(match_group, fn, args.userspace_only)
+        handler, inv, mrsh, sys_id, entry = analyze_fn(match_group, fn, args.userspace_only,
+                                                       args.syscall_filter)
 
         if fn not in invocations:
             invocations[fn] = []
