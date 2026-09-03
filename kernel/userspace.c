@@ -592,7 +592,7 @@ static void unref_check(struct k_object *ko, uintptr_t index)
 	switch (ko->type) {
 	case K_OBJ_CONTAINER: {
 		struct k_container *container = (struct k_container*)ko->name;
-		container->destroy(container->obj);
+		container->destroy(container);
 		} break;
 	case K_OBJ_MSGQ:
 		k_msgq_cleanup((struct k_msgq *)ko->name);
