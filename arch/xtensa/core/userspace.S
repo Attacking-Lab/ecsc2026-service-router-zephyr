@@ -246,6 +246,11 @@ xtensa_userspace_enter:
 	 */
 	entry a1, 16
 
+	/* SPILL_ALL_WINDOWS must never be preempted, so turn off
+	 * interrupts first, as in xtensa_do_syscall.
+	 */
+	rsil a0, 0xf
+
 	SPILL_ALL_WINDOWS
 
 	/* We have to switch to kernel stack before spill kernel data and
