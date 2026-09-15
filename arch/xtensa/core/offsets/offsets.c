@@ -70,6 +70,10 @@ GEN_OFFSET_SYM(_xtensa_irq_bsa_t, hifi);
 GEN_OFFSET_SYM(_thread_arch_t, psp);
 GEN_OFFSET_SYM(_thread_arch_t, return_ps);
 GEN_OFFSET_SYM(_thread_t, switch_handle);
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+GEN_OFFSET_SYM(_thread_arch_t, spill_lo);
+GEN_OFFSET_SYM(_thread_arch_t, spill_hi);
+#endif
 #ifdef CONFIG_XTENSA_MMU
 GEN_OFFSET_SYM(_thread_arch_t, ptables);
 

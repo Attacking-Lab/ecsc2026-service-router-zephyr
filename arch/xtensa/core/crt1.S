@@ -9,6 +9,10 @@
 
 #include <xtensa/coreasm.h>
 
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+#include <xtensa_spill_bounds.h>
+#endif
+
 /* Exports */
 .global _start
 
@@ -102,6 +106,16 @@ _start:
 	rsync
 #endif
 
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+	/*
+	 *  No thread is running yet, so there are no spill bounds to
+	 *  enforce; a zero limit tells the window vectors so. The reset
+	 *  code leaves interrupt vector addresses in these registers.
+	 */
+	movi	a3, 0
+	wsr	a3, ZSR_SPILL_HI
+	rsync
+#endif
 
 	/*
 	 *  Do any initialization that affects the memory map, such as

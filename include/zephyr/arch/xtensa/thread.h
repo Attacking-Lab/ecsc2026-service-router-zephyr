@@ -51,6 +51,16 @@ struct _thread_arch {
 	 * context switching or returning from non-nested interrupts.
 	 */
 	uint32_t return_ps;
+
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+	/* Address range the window vectors accept as a spill target while
+	 * this thread runs: the whole stack object, so that it covers both
+	 * the thread's stack and, for user threads, the privilege stack
+	 * below it. Loaded into ZSR_SPILL_LO/HI when the thread is resumed.
+	 */
+	uint32_t spill_lo;
+	uint32_t spill_hi;
+#endif
 #endif
 
 #ifdef CONFIG_XTENSA_LAZY_HIFI_SHARING

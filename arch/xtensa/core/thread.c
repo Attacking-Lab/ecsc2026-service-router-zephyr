@@ -45,6 +45,17 @@ static void *init_stack(struct k_thread *thread, int *stack_top,
 	thread->arch.psp = NULL;
 #endif
 
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+	/* Everything this thread may legitimately spill a register window
+	 * to: its own stack, plus the reserved area below it, which for a
+	 * user thread holds the privilege stack the syscall path runs on.
+	 */
+	thread->arch.spill_lo = (uint32_t)thread->stack_info.start
+				- K_THREAD_STACK_RESERVED;
+	thread->arch.spill_hi = (uint32_t)(thread->stack_info.start
+					   + thread->stack_info.size);
+#endif
+
 	/* Not-a-cpu ID Ensures that the first time this is run, the
 	 * stack will be invalidated.  That covers the edge case of
 	 * restarting a thread on a stack that had previously been run

@@ -234,6 +234,50 @@ config PRIVILEGED_STACK_SIZE
 	# Must be multiple of CONFIG_MMU_PAGE_SIZE
 	default 4096
 
+config XTENSA_USER_FAULT_BAILOUT
+	bool "Abort user threads instead of halting on unrecoverable faults"
+	default y
+	depends on USERSPACE
+	help
+	  An exception taken while the CPU cannot take another one (a fault
+	  while a double exception is being serviced, or a fault during a
+	  register window spill) leaves no context to return to, so the
+	  arch code halts the system.
+
+	  With this option, such a fault is survivable when it happened on
+	  behalf of a user thread: the arch code abandons the interrupted
+	  context, switches to a private stack and terminates that thread.
+	  Faults with no current thread, or on a supervisor thread, still
+	  halt the system.
+
+config XTENSA_USER_FAULT_BAILOUT_STACK_SIZE
+	int "Stack for the unrecoverable fault bailout"
+	default 1024
+	depends on XTENSA_USER_FAULT_BAILOUT
+	help
+	  The interrupted stack pointer cannot be trusted on this path, so
+	  the bailout runs on a stack of its own. It is only ever used to
+	  reach the scheduler, and is never returned to.
+
+config XTENSA_SPILL_BOUNDS
+	bool "Bound register window spills to the running stack"
+	default y
+	depends on XTENSA_USER_FAULT_BAILOUT
+	help
+	  Register window spills and fills are performed by the exception
+	  vectors with kernel privilege, through stack pointers held in the
+	  interrupted context's registers. A user thread that can control
+	  its own registers can therefore make the CPU read or write kernel
+	  memory at an address of its choosing.
+
+	  With this option the window vectors check every address they are
+	  about to use against the stack of the running context, and treat a
+	  violation as an unrecoverable fault (see XTENSA_USER_FAULT_BAILOUT,
+	  i.e. the offending user thread is terminated). The bounds are kept
+	  in special registers, so the check itself cannot fault.
+
+	  This costs a handful of instructions on every window spill.
+
 config XTENSA_MMU_FLUSH_AUTOREFILL_DTLBS_ON_SWAP
 	bool "Flush all auto-refill data TLBs when swapping page tables"
 	depends on USERSPACE

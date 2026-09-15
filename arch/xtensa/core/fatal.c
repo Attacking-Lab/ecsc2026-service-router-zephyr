@@ -109,6 +109,41 @@ void xtensa_fatal_error(unsigned int reason, const struct arch_esf *esf)
 	z_fatal_error(reason, esf);
 }
 
+#ifdef CONFIG_XTENSA_USER_FAULT_BAILOUT
+/*
+ * Tail of the unrecoverable exception path (see _xtensa_unrecoverable).
+ *
+ * Entered with a fresh register window, interrupts masked and a stack of our
+ * own, with the user thread that could not be recovered still current. There
+ * is no interrupted context left to describe, hence the NULL ESF, and nothing
+ * to return to: z_fatal_error() terminates the thread and the scheduler moves
+ * on to another one.
+ */
+FUNC_NORETURN void xtensa_user_fault_bailout(void)
+{
+#if XCHAL_HAVE_THREADPTR && defined(CONFIG_THREAD_LOCAL_STORAGE)
+	extern Z_THREAD_LOCAL uint32_t is_user_mode;
+
+	/* The thread was in user mode and its TLS still says so, the way the
+	 * syscall entry clears it. Kernel code called on its behalf below
+	 * (the fatal path prints) would otherwise take the user-mode route
+	 * and issue syscalls from kernel mode.
+	 */
+	is_user_mode = 0;
+#endif
+
+	/* Not in interrupt context any more as far as the kernel is
+	 * concerned, so the fatal path aborts the current thread instead of
+	 * arranging a return into it.
+	 */
+	arch_curr_cpu()->nested = 0;
+
+	z_fatal_error(K_ERR_CPU_EXCEPTION, NULL);
+
+	CODE_UNREACHABLE;
+}
+#endif /* CONFIG_XTENSA_USER_FAULT_BAILOUT */
+
 #if defined(CONFIG_SIMULATOR_XTENSA) || defined(XT_SIMULATOR)
 void xtensa_simulator_exit(int return_code)
 {

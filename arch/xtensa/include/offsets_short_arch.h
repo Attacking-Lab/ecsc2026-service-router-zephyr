@@ -18,6 +18,14 @@
 #define _thread_offset_to_ptables \
 	(___thread_t_arch_OFFSET + ___thread_arch_t_ptables_OFFSET)
 
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+#define _thread_offset_to_spill_lo \
+	(___thread_t_arch_OFFSET + ___thread_arch_t_spill_lo_OFFSET)
+
+#define _thread_offset_to_spill_hi \
+	(___thread_t_arch_OFFSET + ___thread_arch_t_spill_hi_OFFSET)
+#endif
+
 #define _thread_offset_to_mem_domain \
 	(___thread_t_mem_domain_info_OFFSET + ___mem_domain_info_t_mem_domain_OFFSET)
 

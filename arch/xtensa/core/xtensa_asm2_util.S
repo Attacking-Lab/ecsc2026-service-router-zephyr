@@ -166,6 +166,18 @@ _restore_context:
 	bnez a0, _restore_ps_from_stack
 
 	l32i a0, a2, ___cpu_t_current_OFFSET
+
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+	/* Back on a thread: bound window spills to its stack again. Nested
+	 * returns skip this and keep whatever the interrupt stack crossover
+	 * left behind. a3 is reloaded from the BSA further down.
+	 */
+	l32i a3, a0, _thread_offset_to_spill_lo
+	wsr a3, ZSR_SPILL_LO
+	l32i a3, a0, _thread_offset_to_spill_hi
+	wsr a3, ZSR_SPILL_HI
+#endif
+
 	l32i a0, a0, _thread_offset_to_return_ps
 	wsr a0, ZSR_EPS
 
@@ -533,6 +545,13 @@ _DoubleExceptionVector:
 	addi a0, a0, -EXCCAUSE_DTLB_MISS
 	beqz a0, _handle_tlb_miss_dblexc
 
+	/* A stashed DEPC that nothing has cleared yet means a double
+	 * exception is already being serviced and we have taken another
+	 * one. That is the unrecoverable case; the first one is not.
+	 */
+	rsr a0, ZSR_DEPC_SAVE
+	bnez a0, _TripleFault
+
 	/* Need to stash the DEPC for used by the C handler.
 	 * If we encounter any DTLB misses when PS.EXCM is set,
 	 * this vector will be used and the DEPC register will
@@ -544,11 +563,20 @@ _DoubleExceptionVector:
 
 	rsr a0, ZSR_DBLEXC
 
-	j _Level1Vector
+	/* Enter the level 1 vector past the gate we just passed ourselves.
+	 * From there this is an ordinary fatal exception: the C handler sees
+	 * the stashed DEPC, terminates the thread and schedules another one.
+	 */
+	j _Level1VectorFromDouble
 
 _TripleFault:
+	/* Out of line: the interrupted context is unusable, and deciding
+	 * what to do about it does not fit in the vector.
+	 */
+	j _xtensa_unrecoverable
 #endif /* CONFIG_XTENSA_MMU */
 
+#ifndef CONFIG_XTENSA_MMU
 #if XCHAL_HAVE_DEBUG && defined(CONFIG_XTENSA_BREAK_ON_UNRECOVERABLE_EXCEPTIONS)
 	/* Signals an unhandled double exception, and unrecoverable exceptions.
 	 * Definitely needs debugger to be attached to the hardware or simulator
@@ -567,6 +595,7 @@ _TripleFault:
 #endif
 1:
 	j	1b
+#endif /* !CONFIG_XTENSA_MMU */
 
 #ifdef CONFIG_XTENSA_MMU
 _handle_tlb_miss_dblexc:
@@ -588,5 +617,116 @@ _handle_tlb_miss_dblexc:
 	rfde
 #endif
 .popsection
+
+#ifdef CONFIG_XTENSA_MMU
+/*
+ * Unrecoverable exception handling.
+ *
+ * Reached from _TripleFault: an exception arrived while the CPU could not
+ * take another one, so the interrupted context cannot be resumed. Its
+ * register window may be half moved and a1 may not point at a stack at all,
+ * which is why none of this can be done in the vector itself.
+ *
+ * If it happened on behalf of a user thread, that context is expendable:
+ * rebuild a minimal one on a stack of our own and terminate the thread.
+ * Anything else - a supervisor thread, or no thread at all - is a kernel
+ * bug, and still halts the system as before.
+ */
+.pushsection .iram0.text, "ax"
+
+#ifdef CONFIG_XTENSA_USER_FAULT_BAILOUT
+.align 4
+_bailout_ps_imm:
+	.word PS_UM | PS_WOE | PS_INTLEVEL(XCHAL_EXCM_LEVEL)
+_bailout_sp_imm:
+	.word _xtensa_bailout_stack_top
+_bailout_fn_imm:
+	.word xtensa_user_fault_bailout
+#endif
+
+.global _xtensa_unrecoverable
+.align 4
+_xtensa_unrecoverable:
+
+#ifdef CONFIG_XTENSA_USER_FAULT_BAILOUT
+	rsr a0, ZSR_CPU
+	beqz a0, _xtensa_unrecoverable_halt
+	l32i a0, a0, ___cpu_t_current_OFFSET
+	beqz a0, _xtensa_unrecoverable_halt
+	l32i a0, a0, ___thread_base_t_user_options_OFFSET
+	bbci a0, 2, _xtensa_unrecoverable_halt	/* K_USER == BIT(2) */
+
+	/* One register window, kernel mode, interrupts masked at the level
+	 * the fatal path expects. PS.EXCM is still set while WINDOWSTART and
+	 * WINDOWBASE are written, so no window exception can be taken in
+	 * between.
+	 */
+	movi a0, 1
+	wsr a0, WINDOWSTART
+	movi a0, 0
+	wsr a0, WINDOWBASE
+	rsync
+
+	l32r a0, _bailout_ps_imm
+	wsr.ps a0
+	rsync
+
+	/* Nothing is going to reach the code that clears this, and a stale
+	 * value would make the next exception look like a triple fault.
+	 */
+	movi a0, 0
+	wsr a0, ZSR_DEPC_SAVE
+
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+	/* We are about to run C on a stack that belongs to no thread, so
+	 * the bounds of the one we are abandoning must not apply to it.
+	 * The next thread to be resumed re-establishes its own.
+	 */
+	wsr a0, ZSR_SPILL_HI
+#endif
+
+	/* Hand-placed literals: this section's pool is emitted after the
+	 * code, and -mlongcalls would turn a plain call4 into an l32r of
+	 * one of those.
+	 */
+	l32r a1, _bailout_sp_imm
+	l32r a0, _bailout_fn_imm
+	callx4 a0
+	/* does not return */
+#endif /* CONFIG_XTENSA_USER_FAULT_BAILOUT */
+
+_xtensa_unrecoverable_halt:
+#if XCHAL_HAVE_DEBUG && defined(CONFIG_XTENSA_BREAK_ON_UNRECOVERABLE_EXCEPTIONS)
+	/* Signals an unhandled double exception, and unrecoverable exceptions.
+	 * Definitely needs debugger to be attached to the hardware or simulator
+	 * to catch this.
+	 */
+	break	1, 4
+#elif defined(CONFIG_SIMULATOR_XTENSA) || defined(XT_SIMULATOR)
+	/* Tell simulator to stop executing here, instead of trying to do
+	 * an infinite loop (see below). Greatly help with using tracing in
+	 * simulator so that traces will not have infinite iterations of
+	 * jumps.
+	 */
+	movi a3, 1
+	movi a2, SYS_exit
+	simcall
+#endif
+1:
+	j	1b
+
+.popsection
+
+#ifdef CONFIG_XTENSA_USER_FAULT_BAILOUT
+.pushsection .bss, "aw", @nobits
+.align 16
+_xtensa_bailout_stack:
+	.space CONFIG_XTENSA_USER_FAULT_BAILOUT_STACK_SIZE
+.global _xtensa_bailout_stack_top
+_xtensa_bailout_stack_top:
+.popsection
+#endif
+
+#endif /* CONFIG_XTENSA_MMU */
 
 #endif

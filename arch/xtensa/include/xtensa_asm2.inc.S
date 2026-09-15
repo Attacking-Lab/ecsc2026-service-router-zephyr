@@ -10,6 +10,10 @@
 #include <zephyr/zsr.h>
 #include "xtensa_asm2_context.h"
 
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+#include "xtensa_spill_bounds.h"
+#endif
+
 #include <zephyr/offsets.h>
 #include <offsets_short.h>
 
@@ -364,6 +368,16 @@ _xstack_call0_\@:
 	 */
 	entry a1, 16
 	mov a1, a2
+
+#ifdef CONFIG_XTENSA_SPILL_BOUNDS
+	/* Now running on the interrupt stack, which is not the current
+	 * thread's, so the thread's spill bounds do not apply. They are
+	 * restored when we return to a thread (see _restore_context).
+	 */
+	movi a2, 0
+	wsr a2, ZSR_SPILL_HI
+#endif
+
 	rsr.ZSR_EPS a2
 	wsr.ps a2
 
@@ -720,11 +734,39 @@ _Level\LVL\()Vector:
 	rsr a0, ZSR_A0SAVE
 	j _TripleFault
 
+	/* Entry point used by _DoubleExceptionVector. It stashes the DEPC
+	 * itself, so the gate above would always fire for it; it makes the
+	 * equivalent check before stashing instead. Everything else about
+	 * the exception is handled exactly as usual.
+	 */
+.global _Level1VectorFromDouble
+_Level1VectorFromDouble:
+	wsr a0, ZSR_A0SAVE
+
+	rsr.exccause a0
+	wsr a0, ZSR_EXCCAUSE_SAVE
+
+	esync
+
 _not_triple_fault:
 .endif
 #endif
 
 	addi a1, a1, -___xtensa_irq_bsa_t_SIZEOF
+
+#if defined(CONFIG_XTENSA_SPILL_BOUNDS)
+.if \LVL == 1
+	/* The interrupted stack pointer is about to be written through at
+	 * kernel privilege. If it does not belong to the running context,
+	 * give up on that context instead: a0 is already stashed, so it is
+	 * free, and _xtensa_unrecoverable needs no stack.
+	 */
+	j 6f
+9:	j _xtensa_unrecoverable
+6:	SPILL_BOUNDS_CHECK a1, a0, 9b
+	rsr a0, ZSR_A0SAVE
+.endif
+#endif
 
 #ifdef CONFIG_XTENSA_MMU
 .if \LVL == 1
