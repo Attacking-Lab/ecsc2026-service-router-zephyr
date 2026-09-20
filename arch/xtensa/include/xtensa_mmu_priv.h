@@ -481,11 +481,24 @@ static inline void xtensa_itlb_vaddr_invalidate(void *vaddr)
  */
 static inline void xtensa_dtlb_vaddr_invalidate(void *vaddr)
 {
-	uint32_t entry = xtensa_dtlb_probe(vaddr);
+	/* PDTLB reports at most one matching entry, and only for an ASID that
+	 * is currently in RASID. That is not enough to invalidate a page whose
+	 * ring differs between two sets of page tables: a page that was a user
+	 * stack, went back to the heap and is a user stack again holds both a
+	 * kernel-ASID and a user-ASID entry, and RASID always carries ASID 1 in
+	 * ring 0, so both stay live and the next access to it raises EXCCAUSE 25
+	 * (DTLB multihit). Clear the page out of all four autorefill ways
+	 * instead: idtlb takes the way in bits [3:0] and picks the entry from
+	 * the address, and needs no ASID at all.
+	 */
+	uint32_t idx = ((uint32_t)vaddr >> XTENSA_MMU_PTE_PPN_SHIFT) &
+		       (BIT(XCHAL_DTLB_ARF_ENTRIES_LOG2) - 1U);
+	uint32_t way;
 
-	if (entry & XTENSA_MMU_PDTLB_HIT) {
-		xtensa_dtlb_entry_invalidate_sync(entry);
+	for (way = 0; way < XTENSA_MMU_NUM_TLB_AUTOREFILL_WAYS; way++) {
+		xtensa_dtlb_entry_invalidate(way + (idx << XTENSA_MMU_PTE_PPN_SHIFT));
 	}
+	__asm__ volatile("isync" ::: "memory");
 }
 
 /**
