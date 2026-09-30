@@ -1521,9 +1521,18 @@ void xtensa_user_stack_perms(struct k_thread *thread)
 		     (IS_ENABLED(CONFIG_INIT_STACKS)) ? 0xAA : 0x00,
 		     thread->stack_info.size - thread->stack_info.delta);
 
+	/* Execute permission is part of the mapping the thread starts with,
+	 * rather than something added afterwards: entering user mode maps the
+	 * stack read/write over whatever was there, so a partition granting X
+	 * has to be re-added after the thread is already running, and the
+	 * window in which it is not yet executable is visible to the thread.
+	 */
 	update_region(thread_page_tables_get(thread),
 		      thread->stack_info.start, thread->stack_info.size,
-		      RING_USER, XTENSA_MMU_PERM_W | XTENSA_MMU_CACHED_WB, 0);
+		      RING_USER,
+		      (IS_ENABLED(CONFIG_XTENSA_USER_STACK_EXECUTABLE)
+			       ? XTENSA_MMU_PERM_WX
+			       : XTENSA_MMU_PERM_W) | XTENSA_MMU_CACHED_WB, 0);
 }
 
 int arch_mem_domain_max_partitions_get(void)

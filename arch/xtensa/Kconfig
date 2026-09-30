@@ -234,6 +234,27 @@ config PRIVILEGED_STACK_SIZE
 	# Must be multiple of CONFIG_MMU_PAGE_SIZE
 	default 4096
 
+config XTENSA_USER_STACK_EXECUTABLE
+	bool "Map user thread stacks writable and executable"
+	depends on USERSPACE
+	depends on !EXECUTE_XOR_WRITE
+	help
+	  Grant execute permission on every user thread's stack when it is
+	  mapped for user mode, instead of write only.
+
+	  Only for applications that deliberately run code from a thread
+	  stack. The alternative is to add an executable partition to the
+	  thread's own memory domain, but that cannot be done before the
+	  thread starts: dropping into user mode maps the stack read/write
+	  over whatever was there, so the partition has to be re-added once
+	  the thread is already running, leaving a window in which its stack
+	  is not yet executable and forcing the application to order around
+	  it. Granting it here removes the window and the ordering.
+
+	  W^X is a stronger property and is enforced for partitions by
+	  CONFIG_EXECUTE_XOR_WRITE, which this contradicts outright rather
+	  than quietly sidestepping -- hence the dependency.
+
 config XTENSA_USER_FAULT_BAILOUT
 	bool "Abort user threads instead of halting on unrecoverable faults"
 	default y
