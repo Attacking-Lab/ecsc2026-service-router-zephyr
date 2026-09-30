@@ -278,12 +278,41 @@ config XTENSA_SPILL_BOUNDS
 
 	  This costs a handful of instructions on every window spill.
 
+config XTENSA_MMU_FLUSH_AUTOREFILL_TLBS_ON_SWAP
+	bool
+	depends on USERSPACE
+	help
+	  Hidden, selected by the two options below. Swapping page tables
+	  through a C function rather than the SWAP_PAGE_TABLE assembly is
+	  what makes room to invalidate anything at all, so either flush
+	  needs it; which TLBs actually get flushed is decided there.
+
 config XTENSA_MMU_FLUSH_AUTOREFILL_DTLBS_ON_SWAP
 	bool "Flush all auto-refill data TLBs when swapping page tables"
 	depends on USERSPACE
+	select XTENSA_MMU_FLUSH_AUTOREFILL_TLBS_ON_SWAP
 	help
 	  This flushes (invalidates) all auto-refill data TLBs when page
 	  tables are swapped.
+
+	  Turn this on where ASIDs alone do not separate the domains --
+	  notably where the same page is mapped at different rings by two
+	  sets of page tables, which leaves one entry per ring live and
+	  raises EXCCAUSE 25 (DTLB multihit) on the next access.
+
+config XTENSA_MMU_FLUSH_AUTOREFILL_ITLBS_ON_SWAP
+	bool "Flush all auto-refill instruction TLBs when swapping page tables"
+	depends on USERSPACE
+	select XTENSA_MMU_FLUSH_AUTOREFILL_TLBS_ON_SWAP
+	help
+	  The same for the instruction TLBs, where the equivalent fault is
+	  EXCCAUSE 17 (ITLB multihit).
+
+	  Only reachable where a page is executable *and* mapped at
+	  different rings by two sets of page tables, so it is separate
+	  from the data option rather than implied by it: most
+	  applications never map an executable page into a user memory
+	  domain, and those pay nothing.
 
 config XTENSA_MMU_PAGE_TABLE_STATS
 	bool "Page table statistics"

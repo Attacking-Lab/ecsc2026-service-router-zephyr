@@ -464,11 +464,23 @@ static ALWAYS_INLINE uint32_t xtensa_dtlb_probe(void *vaddr)
  */
 static inline void xtensa_itlb_vaddr_invalidate(void *vaddr)
 {
-	uint32_t entry = xtensa_itlb_probe(vaddr);
+	/* Same defect as PDTLB, same remedy -- see xtensa_dtlb_vaddr_invalidate()
+	 * above. PITLB reports at most one matching entry and only for an ASID
+	 * currently in RASID, so it cannot clear a page whose ring differs
+	 * between two sets of page tables; there the fault is EXCCAUSE 17
+	 * (ITLB multihit) rather than 25. Only reachable where a page is
+	 * executable *and* moves between rings, which is why it went unnoticed:
+	 * nothing fetches instructions from a user stack unless the
+	 * application maps one executable on purpose.
+	 */
+	uint32_t idx = ((uint32_t)vaddr >> XTENSA_MMU_PTE_PPN_SHIFT) &
+		       (BIT(XCHAL_ITLB_ARF_ENTRIES_LOG2) - 1U);
+	uint32_t way;
 
-	if (entry & XTENSA_MMU_PITLB_HIT) {
-		xtensa_itlb_entry_invalidate_sync(entry);
+	for (way = 0; way < XTENSA_MMU_NUM_TLB_AUTOREFILL_WAYS; way++) {
+		xtensa_itlb_entry_invalidate(way + (idx << XTENSA_MMU_PTE_PPN_SHIFT));
 	}
+	__asm__ volatile("isync" ::: "memory");
 }
 
 /**

@@ -1448,6 +1448,13 @@ static void region_map_update(uint32_t *l1_table, uintptr_t start,
 		}
 
 		xtensa_dtlb_vaddr_invalidate((void *)page);
+		/* Unconditionally, and not only when the new attributes are
+		 * executable: the entry that has to go is the one cached for
+		 * the *previous* mapping, and this function does not know what
+		 * that was. A page losing execute permission needs the ITLB
+		 * cleared just as much as one gaining it.
+		 */
+		xtensa_itlb_vaddr_invalidate((void *)page);
 	}
 }
 
@@ -1832,8 +1839,8 @@ bool xtensa_exc_load_store_ring_error_check(void *bsa_p)
 	return false;
 }
 
-#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_DTLBS_ON_SWAP
-/* This is only used when swapping page tables and auto-refill DTLBs
+#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_TLBS_ON_SWAP
+/* This is only used when swapping page tables and auto-refill TLBs
  * needing to be invalidated. Otherwise, SWAP_PAGE_TABLE assembly
  * is used to avoid a function call.
  */
@@ -1844,7 +1851,17 @@ void xtensa_swap_update_page_tables(struct k_thread *incoming)
 
 	xtensa_mmu_set_paging(domain);
 
+#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_DTLBS_ON_SWAP
 	xtensa_dtlb_autorefill_invalidate();
+#endif
+#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_ITLBS_ON_SWAP
+	/* The instruction side needs this for the same reason the data side
+	 * does: the swap changes which page tables are live, but nothing else
+	 * evicts entries cached under the outgoing domain's ASID, so a page
+	 * mapped at different rings by two domains keeps an entry for each.
+	 */
+	xtensa_itlb_autorefill_invalidate();
+#endif
 }
 #endif
 

@@ -410,7 +410,7 @@ _xstack_call0_\@:
 	l32i a6, a6, ___cpu_t_current_OFFSET
 
 #ifdef CONFIG_XTENSA_MMU
-#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_DTLBS_ON_SWAP
+#ifdef CONFIG_XTENSA_MMU_FLUSH_AUTOREFILL_TLBS_ON_SWAP
 	call4 xtensa_swap_update_page_tables
 #else
 	SWAP_PAGE_TABLE a6, a3, a7
